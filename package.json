@@ -1,0 +1,33 @@
+{
+  "name": "focusly",
+  "version": "1.0.0",
+  "description": "Focusly - Pomodoro desktop app",
+  "author": "Focusly",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win",
+    "build:all": "electron-builder -mwl"
+  },
+  "build": {
+    "appId": "com.focusly.app",
+    "productName": "Focusly",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "index.html", "package.json"],
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "icon": "icon.png"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "icon.png"
+    },
+    "mac": { "target": ["dmg"] }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.0"
+  }
+}

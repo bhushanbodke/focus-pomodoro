@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Focusly — Pomodoro</title>
+<style>
+  :root {
+    --bg: #0d0f14;
+    --card: #161923;
+    --card-2: #1c2030;
+    --text: #eef1f8;
+    --muted: #8d94a8;
+    --line: #2a2f40;
+    --accent: #ff6b6b;
+    --accent-soft: rgba(255, 107, 107, .15);
+    --green: #4ecdc4;
+    --green-soft: rgba(78, 205, 196, .15);
+    --purple: #a78bfa;
+    --radius: 18px;
+    --shadow: 0 18px 50px rgba(0, 0, 0, .35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    overflow-x: hidden;
+  }
+
+  .bg-glow {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(600px 400px at 15% -5%, rgba(255, 107, 107, .13), transparent 60%),
+      radial-gradient(600px 500px at 95% 10%, rgba(167, 139, 250, .12), transparent 60%),
+      radial-gradient(700px 500px at 50% 100%, rgba(78, 205, 196, .07), transparent 60%);
+  }
+
+  .app { max-width: 1180px; margin: 0 auto; padding: 28px 22px 60px; }
+
+  header.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 26px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo {
+    width: 42px; height: 42px; border-radius: 13px;
+    background: linear-gradient(135deg, var(--accent), #ff9f68);
+    display: grid; place-items: center;
+    box-shadow: 0 8px 22px rgba(255, 107, 107, .3);
+  }
+  .brand h1 { font-size: 22px; margin: 0; letter-spacing: -.4px; }
+  .brand p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .pill {
+    background: var(--card); border: 1px solid var(--line);
+    color: var(--muted); border-radius: 999px; padding: 8px 14px;
+    font-size: 12px; font-weight: 600; letter-spacing: .3px;
+  }
+  .pill strong { color: var(--text); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, .9fr);
+    gap: 22px;
+    align-items: start;
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--card), var(--card-2));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+  }
+
+  /* ---------- Timer ---------- */
+  .modes {
+    display: flex; gap: 6px; background: rgba(0,0,0,.22);
+    border-radius: 12px; padding: 5px; margin-bottom: 26px;
+  }
+  .mode-btn {
+    flex: 1; border: 0; background: transparent; color: var(--muted);
+    padding: 10px 8px; border-radius: 9px; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: .2s;
+  }
+  .mode-btn:hover { color: var(--text); }
+  .mode-btn.active {
+    background: var(--accent-soft); color: var(--accent);
+    box-shadow: inset 0 0 0 1px rgba(255,107,107,.25);
+  }
+  .mode-btn[data-mode="short"].active,
+  .mode-btn[data-mode="long"].active {
+    background: var(--green-soft); color: var(--green);
+    box-shadow: inset 0 0 0 1px rgba(78,205,196,.25);
+  }
+
+  .ring-wrap { position: relative; width: 300px; height: 300px; margin: 4px auto 8px; }
+  .ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-bg { fill: none; stroke: rgba(255,255,255,.06); stroke-width: 12; }
+  .ring-fg {
+    fill: none; stroke: var(--accent); stroke-width: 12; stroke-linecap: round;
+    transition: stroke-dashoffset .35s linear, stroke .3s;
+    filter: drop-shadow(0 0 10px rgba(255,107,107,.35));
+  }
+  body.break-mode .ring-fg { stroke: var(--green); filter: drop-shadow(0 0 10px rgba(78,205,196,.35)); }
+
+  .ring-center {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .time-display {
+    font-size: 64px; font-weight: 700; letter-spacing: -3px;
+    font-variant-numeric: tabular-nums; line-height: 1;
+  }
+  .ring-label { margin-top: 10px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+
+  .controls { display: flex; justify-content: center; align-items: center; gap: 14px; margin-top: 18px; }
+  .btn {
+    border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--text);
+    border-radius: 12px; cursor: pointer; font-weight: 600; transition: .2s;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:hover { background: rgba(255,255,255,.1); transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #ff8a5b);
+    border-color: transparent; color: #1a0d0d; padding: 14px 34px; font-size: 15px;
+    box-shadow: 0 10px 26px rgba(255,107,107,.28); min-width: 160px;
+  }
+  body.break-mode .btn-primary {
+    background: linear-gradient(135deg, var(--green), #5ee0a8);
+    color: #06211c; box-shadow: 0 10px 26px rgba(78,205,196,.25);
+  }
+  .btn-icon { width: 46px; height: 46px; border-radius: 12px; font-size: 18px; }
+
+  .session-dots { display: flex; justify-content: center; align-items: center; gap: 9px; margin-top: 24px; }
+  .session-dots span {
+    width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.14);
+    transition: .3s;
+  }
+  .session-dots span.done { background: var(--accent); box-shadow: 0 0 10px rgba(255,107,107,.6); }
+  .session-dots small { color: var(--muted); font-size: 12px; margin-left: 6px; }
+
+  /* ---------- Side ---------- */
+  .side { display: flex; flex-direction: column; gap: 22px; }
+  .card h2 {
+    margin: 0 0 4px; font-size: 15px; letter-spacing: .2px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card .sub { color: var(--muted); font-size: 12px; margin: 0 0 18px; }
+
+  .goal-main { display: flex; align-items: center; gap: 18px; }
+  .goal-ring { position: relative; width: 108px; height: 108px; flex: none; }
+  .goal-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .goal-ring .ring-bg { stroke-width: 9; }
+  .goal-ring .goal-fg {
+    fill: none; stroke: var(--purple); stroke-width: 9; stroke-linecap: round;
+    transition: stroke-dashoffset .4s ease;
+  }
+  .goal-ring .pct {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-size: 22px; font-weight: 700;
+  }
+  .goal-info .big { font-size: 26px; font-weight: 700; letter-spacing: -.5px; }
+  .goal-info .big span { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .goal-info .small { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.5; }
+  .goal-bar { height: 8px; background: rgba(255,255,255,.06); border-radius: 99px; margin-top: 18px; overflow: hidden; }
+  .goal-bar > div {
+    height: 100%; border-radius: 99px; width: 0%;
+    background: linear-gradient(90deg, var(--purple), var(--accent));
+    transition: width .4s ease;
+  }
+  .goal-msg { font-size: 12px; color: var(--muted); margin-top: 10px; text-align: center; }
+  .goal-msg.met { color: var(--green); font-weight: 700; }
+
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  .field input[type="number"] {
+    width: 100%; background: rgba(0,0,0,.22); border: 1px solid var(--line);
+    color: var(--text); border-radius: 10px; padding: 10px 12px; font-size: 14px;
+    outline: none;
+  }
+  .field input[type="number"]:focus { border-color: var(--purple); }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px;
+  }
+  .toggle-row:first-of-type { border-top: 0; }
+  .switch { position: relative; width: 40px; height: 23px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: rgba(255,255,255,.15);
+    border-radius: 99px; cursor: pointer; transition: .25s;
+  }
+  .slider:before {
+    content: ""; position: absolute; width: 17px; height: 17px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .25s;
+  }
+  .switch input:checked + .slider { background: var(--purple); }
+  .switch input:checked + .slider:before { transform: translateX(17px); }
+  .volume-row { display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+  .volume-row input[type="range"] { flex: 1; accent-color: var(--purple); }
+  .volume-row span { font-size: 12px; color: var(--muted); width: 34px; text-align: right; }
+
+  /* ---------- History ---------- */
+  .history { margin-top: 22px; }
+  .history-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .period-tabs { display: flex; gap: 5px; background: rgba(0,0,0,.2); padding: 4px; border-radius: 10px; }
+  .period-tabs button {
+    border: 0; background: transparent; color: var(--muted); cursor: pointer;
+    padding: 6px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
+  }
+  .period-tabs button.active { background: var(--card-2); color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+  .stats-row {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0 8px;
+  }
+  .stat { background: rgba(0,0,0,.18); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .stat .value { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+  .stat .label { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+  .chart { position: relative; height: 200px; margin: 22px 0 8px; padding-left: 44px; }
+  .chart .goal-line {
+    position: absolute; left: 44px; right: 0; border-top: 1px dashed rgba(167,139,250,.45);
+    z-index: 1; pointer-events: none;
+  }
+  .chart .goal-line span {
+    position: absolute; right: 0; top: -17px; font-size: 10px; color: var(--purple);
+    background: var(--card); padding: 0 4px;
+  }
+  .bars { height: 100%; display: flex; align-items: flex-end; gap: 6px; }
+  .bar-col { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+  .bar {
+    width: 100%; max-width: 46px; border-radius: 7px 7px 3px 3px;
+    background: linear-gradient(180deg, var(--accent), rgba(255,107,107,.35));
+    min-height: 2px; transition: height .4s ease; position: relative;
+  }
+  .bar.goal-met { background: linear-gradient(180deg, var(--green), rgba(78,205,196,.3)); }
+  .bar:hover { filter: brightness(1.25); }
+  .bar .tip {
+    position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
+    background: #000; color: #fff; font-size: 11px; padding: 5px 8px; border-radius: 6px;
+    white-space: nowrap; opacity: 0; pointer-events: none; transition: .15s; z-index: 5;
+  }
+  .bar:hover .tip { opacity: 1; }
+  .bar-label { font-size: 10px; color: var(--muted); margin-top: 8px; text-align: center; }
+
+  .day-list { margin-top: 18px; border-top: 1px solid var(--line); }
+  .day-row {
+    display: grid; grid-template-columns: 1.3fr 1fr .8fr auto; align-items: center;
+    gap: 10px; padding: 12px 4px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .day-row:last-child { border-bottom: 0; }
+  .day-row .date { font-weight: 600; }
+  .day-row .date small { color: var(--muted); font-weight: 400; margin-left: 8px; }
+  .day-row .time { font-variant-numeric: tabular-nums; }
+  .day-row .count { color: var(--muted); }
+  .day-row .mini-bar { height: 6px; background: rgba(255,255,255,.07); border-radius: 99px; overflow: hidden; grid-column: 1 / -1; margin-top: -4px; }
+  .day-row .mini-bar > div { height: 100%; border-radius: 99px; background: var(--purple); }
+
+  .empty { text-align: center; color: var(--muted); padding: 40px 10px; font-size: 13px; }
+
+  .history-actions { display: flex; gap: 8px; }
+  .btn-sm { padding: 8px 13px; font-size: 12px; border-radius: 9px; }
+
+  /* ---------- Toast / Modal ---------- */
+  .toast {
+    position: fixed; bottom: 26px; left: 50%; transform: translate(-50%, 20px);
+    background: var(--card-2); border: 1px solid var(--line); color: var(--text);
+    padding: 13px 20px; border-radius: 12px; font-size: 13px; font-weight: 600;
+    box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: .3s; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none;
+    align-items: center; justify-content: center; z-index: 60; padding: 20px;
+    backdrop-filter: blur(4px);
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 24px; width: 100%; max-width: 360px; box-shadow: var(--shadow);
+  }
+  .modal h3 { margin: 0 0 16px; font-size: 17px; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-actions .btn { flex: 1; padding: 11px; }
+
+  .shortcuts { margin-top: 22px; text-align: center; color: var(--muted); font-size: 11px; }
+  kbd {
+    background: rgba(255,255,255,.07); border: 1px solid var(--line);
+    border-radius: 5px; padding: 2px 6px; font-size: 10px; color: var(--text);
+  }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .app { padding: 18px 14px 40px; }
+    .card { padding: 18px; }
+    .ring-wrap { width: 250px; height: 250px; }
+    .time-display { font-size: 52px; }
+    .day-row { grid-template-columns: 1fr 1fr; }
+    .day-row .count { display: none; }
+    .chart { padding-left: 34px; }
+    .chart .goal-line { left: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-glow"></div>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2"/><path d="M9 2h6"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Focusly</h1>
+        <p>Stay focused. Track your progress.</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="pill">Today <strong id="todayDate">—</strong></div>
+      <div class="pill">🔥 <strong id="streakTop">0</strong> day streak</div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Timer card -->
+    <section class="card" id="timerCard">
+      <div class="modes">
+        <button class="mode-btn active" data-mode="focus">Focus</button>
+        <button class="mode-btn" data-mode="short">Short break</button>
+        <button class="mode-btn" data-mode="long">Long break</button>
+      </div>
+
+      <div class="ring-wrap">
+        <svg viewBox="0 0 300 300">
+          <circle class="ring-bg" cx="150" cy="150" r="132" />
+          <circle class="ring-fg" id="ringFg" cx="150" cy="150" r="132" />
+        </svg>
+        <div class="ring-center">
+          <div class="time-display" id="timeDisplay">25:00</div>
+          <div class="ring-label" id="ringLabel">Time to focus</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-icon" id="resetBtn" title="Reset timer">↺</button>
+        <button class="btn btn-primary" id="startBtn">▶ Start</button>
+        <button class="btn btn-icon" id="skipBtn" title="Skip to next session">⏭</button>
+      </div>
+
+      <div class="session-dots" id="sessionDots"></div>
+      <div class="shortcuts">
+        <kbd>Space</kbd> start / pause &nbsp;·&nbsp; <kbd>R</kbd> reset &nbsp;·&nbsp; <kbd>S</kbd> skip
+      </div>
+    </section>
+
+    <!-- Side panel -->
+    <aside class="side">
+      <section class="card">
+        <h2>🎯 Daily goal</h2>
+        <p class="sub">Your focus target for today</p>
+        <div class="goal-main">
+          <div class="goal-ring">
+            <svg viewBox="0 0 108 108">
+              <circle class="ring-bg" cx="54" cy="54" r="44" />
+              <circle class="goal-fg" id="goalFg" cx="54" cy="54" r="44" />
+            </svg>
+            <div class="pct" id="goalPct">0%</div>
+          </div>
+          <div class="goal-info">
+            <div class="big" id="goalToday">0m <span>/ 120m</span></div>
+            <div class="small" id="goalRemaining">120 minutes to go. Let's begin!</div>
+          </div>
+        </div>
+        <div class="goal-bar"><div id="goalBarFill"></div></div>
+        <div class="goal-msg" id="goalMsg">Every minute counts.</div>
+      </section>
+
+      <section class="card">
+        <h2>⚙️ Settings</h2>
+        <p class="sub">Durations, goal &amp; sound</p>
+        <div class="grid-3">
+          <div class="field"><label>Focus (min)</label><input type="number" id="setFocus" min="1" max="180" value="25" /></div>
+          <div class="field"><label>Short (min)</label><input type="number" id="setShort" min="1" max="60" value="5" /></div>
+          <div class="field"><label>Long (min)</label><input type="number" id="setLong" min="1" max="90" value="15" /></div>
+        </div>
+        <div class="field"><label>Daily goal (minutes)</label><input type="number" id="setGoal" min="5" max="1440" value="120" /></div>
+
+        <div class="toggle-row">
+          <span>🔔 Sound on completion</span>
+          <label class="switch"><input type="checkbox" id="setSound" checked /><span class="slider"></span></label>
+        </div>
+        <div class="volume-row">
+          <span style="width:auto">Volume</span>
+          <input type="range" id="setVolume" min="0" max="100" value="70" />
+          <span id="volVal">70%</span>
+        </div>
+        <div class="toggle-row">
+          <span>💬 Desktop notifications</span>
+          <label class="switch"><input type="checkbox" id="setNotify" /><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <span>⏩ Auto-start next session</span>
+          <label class="switch"><input type="checkbox" id="setAuto" /><span class="slider"></span></label>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- History -->
+  <section class="card history">
+    <div class="history-head">
+      <div>
+        <h2>📊 History</h2>
+        <p class="sub">See how much focus you put in each day</p>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <div class="period-tabs" id="periodTabs">
+          <button data-days="7" class="active">7 days</button>
+          <button data-days="14">14 days</button>
+          <button data-days="30">30 days</button>
+        </div>
+        <div class="history-actions">
+          <button class="btn btn-sm" id="logBtn">＋ Log time</button>
+          <button class="btn btn-sm" id="clearBtn" title="Clear all history">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stats-row" id="statsRow"></div>
+    <div class="chart" id="chart"></div>
+    <div class="day-list" id="dayList"></div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-backdrop" id="logModal">
+  <div class="modal">
+    <h3>Log focus time</h3>
+    <div class="field"><label>Minutes</label><input type="number" id="logMinutes" min="1" max="600" value="25" /></div>
+    <div class="field"><label>Date</label><input type="date" id="logDate" style="width:100%;background:rgba(0,0,0,.22);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;color-scheme:dark" /></div>
+    <div class="modal-actions">
+      <button class="btn" id="logCancel">Cancel</button>
+      <button class="btn btn-primary" id="logSave" style="min-width:auto;padding:11px">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const STORE_KEY = "focusly_data_v1";
+  const CIRC_FACTOR = 2 * Math.PI * 132;   // timer ring
+  const GOAL_FACTOR = 2 * Math.PI * 44;    // goal ring
+
+  const defaults = () => ({
+    sessions: [],
+    goalMinutes: 120,
+    settings: { focus: 25, short: 5, long: 15, sound: true, volume: 70, notify: false, auto: false },
+    cycle: 0
+  });
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return defaults();
+      const parsed = JSON.parse(raw);
+      const d = defaults();
+      return {
+        sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+        goalMinutes: Number(parsed.goalMinutes) || d.goalMinutes,
+        settings: Object.assign(d.settings, parsed.settings || {}),
+        cycle: Number(parsed.cycle) || 0
+      };
+    } catch (e) { return defaults(); }
+  }
+
+  let data = load();
+  function save() { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, "0");
+  function dateKey(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function todayKey() { return dateKey(new Date()); }
+  function fmt(sec) { return pad(Math.floor(sec / 60)) + ":" + pad(Math.floor(sec % 60)); }
+  function fmtMinutes(min) {
+    if (min < 60) return Math.round(min) + "m";
+    const h = Math.floor(min / 60), m = Math.round(min % 60);
+    return m ? h + "h " + m + "m" : h + "h";
+  }
+  function daysAgoKey(n) { const d = new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate() - n); return dateKey(d); }
+
+  // ---------- timer ----------
+  const timer = { mode: "focus", remaining: 0, total: 0, running: false, endAt: 0, tick: null };
+
+  function durationFor(mode) { return (data.settings[mode] || 25) * 60; }
+
+  function setMode(mode, silent) {
+    timer.mode = mode;
+    timer.total = durationFor(mode);
+    timer.remaining = timer.total;
+    timer.running = false;
+    clearInterval(timer.tick);
+    document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+    document.body.classList.toggle("break-mode", mode !== "focus");
+    $("ringLabel").textContent = mode === "focus" ? "Time to focus" : "Take a break";
+    renderTimer();
+    updateDocTitle();
+    if (!silent) toast(mode === "focus" ? "Focus session ready" : "Break time — relax!");
+  }
+
+  function renderTimer() {
+    const r = Math.max(0, timer.remaining);
+    $("timeDisplay").textContent = fmt(r);
+    const progress = timer.total > 0 ? 1 - r / timer.total : 0;
+    $("ringFg").style.strokeDasharray = CIRC_FACTOR;
+    $("ringFg").style.strokeDashoffset = CIRC_FACTOR * (1 - progress);
+    $("startBtn").innerHTML = timer.running ? "❚❚ Pause" : "▶ Start";
+    updateDocTitle();
+  }
+
+  function updateDocTitle() {
+    document.title = (timer.running ? fmt(Math.ceil(timer.remaining)) + " · " : "") +
+      (timer.mode === "focus" ? "Focus" : "Break") + " — Focusly";
+  }
+
+  function start() {
+    if (timer.running) return;
+    initAudio();
+    timer.running = true;
+    timer.endAt = Date.now() + timer.remaining * 1000;
+    clearInterval(timer.tick);
+    timer.tick = setInterval(loop, 200);
+    renderTimer();
+  }
+
+  function pause() {
+    if (!timer.running) return;
+    timer.remaining = Math.max(0, (timer.endAt - Date.now()) / 1000);
+    timer.running = false;
+    clearInterval(timer.tick);
+    renderTimer();
+  }
+
+  function toggle() { timer.running ? pause() : start(); }
+
+  function reset() {
+    clearInterval(timer.tick);
+    timer.running = false;
+    timer.remaining = timer.total = durationFor(timer.mode);
+    renderTimer();
+    toast("Timer reset");
+  }
+
+  function skip() {
+    clearInterval(timer.tick);
+    timer.running = false;
+    nextMode();
+    toast("Skipped to " + (timer.mode === "focus" ? "focus" : "break"));
+  }
+
+  function loop() {
+    timer.remaining = (timer.endAt - Date.now()) / 1000;
+    if (timer.remaining <= 0) { complete(); return; }
+    renderTimer();
+  }
+
+  function complete() {
+    clearInterval(timer.tick);
+    timer.running = false;
+    const finishedMode = timer.mode;
+
+    if (finishedMode === "focus") {
+      const mins = Math.round(timer.total / 60);
+      data.sessions.push({ date: todayKey(), minutes: mins, ts: Date.now() });
+      data.cycle += 1;
+      save();
+    }
+    playChime(finishedMode === "focus");
+    notify(finishedMode === "focus" ? "Focus session complete!" : "Break over — ready to focus?");
+    renderAll();
+    toast(finishedMode === "focus" ? "Focus complete — nice work! 🎉" : "Break over — let's focus!");
+
+    nextMode();
+    if (data.settings.auto) start();
+  }
+
+  function nextMode() {
+    if (timer.mode === "focus") {
+      const long = data.cycle > 0 && data.cycle % 4 === 0;
+      setMode(long ? "long" : "short", true);
+    } else {
+      setMode("focus", true);
+    }
+  }
+
+  // ---------- audio ----------
+  let audioCtx = null;
+  function initAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  }
+  function playChime(success) {
+    if (!data.settings.sound || !audioCtx) return;
+    const now = audioCtx.currentTime;
+    const vol = (data.settings.volume / 100) * 0.5;
+    const notes = success ? [523.25, 659.25, 783.99] : [659.25, 523.25];
+    notes.forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t = now + i * 0.16;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(vol, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + 0.75);
+    });
+  }
+
+  function notify(msg) {
+    if (!data.settings.notify || !("Notification" in window) || Notification.permission !== "granted") return;
+    try { new Notification("Focusly", { body: msg, icon: "" }); } catch (e) {}
+  }
+
+  // ---------- goal & stats ----------
+  function minutesOn(key) {
+    return data.sessions.filter(s => s.date === key).reduce((a, s) => a + s.minutes, 0);
+  }
+  function countOn(key) { return data.sessions.filter(s => s.date === key).length; }
+
+  function renderGoal() {
+    const today = minutesOn(todayKey());
+    const goal = data.goalMinutes;
+    const pct = Math.min(100, Math.round((today / goal) * 100));
+    $("goalPct").textContent = pct + "%";
+    $("goalFg").style.strokeDasharray = GOAL_FACTOR;
+    $("goalFg").style.strokeDashoffset = GOAL_FACTOR * (1 - pct / 100);
+    $("goalToday").innerHTML = fmtMinutes(today) + " <span>/ " + fmtMinutes(goal) + "</span>";
+    const left = Math.max(0, goal - today);
+    $("goalRemaining").textContent = left === 0 ? "Goal reached today!" : fmtMinutes(left) + " to go. Keep it up!";
+    $("goalBarFill").style.width = pct + "%";
+    const msg = $("goalMsg");
+    if (today >= goal) { msg.textContent = "🎉 Daily goal achieved! Great job."; msg.classList.add("met"); }
+    else { msg.textContent = "Every minute counts."; msg.classList.remove("met"); }
+  }
+
+  function renderHeader() {
+    $("todayDate").textContent = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    $("streakTop").textContent = calcStreak();
+    const dots = $("sessionDots");
+    dots.innerHTML = "";
+    for (let i = 0; i < 4; i++) {
+      const s = document.createElement("span");
+      if (i < data.cycle % 4 || (data.cycle % 4 === 0 && data.cycle > 0 && i < 4)) s.classList.add("done");
+      dots.appendChild(s);
+    }
+    const small = document.createElement("small");
+    small.textContent = data.cycle + " focus session" + (data.cycle === 1 ? "" : "s") + " completed";
+    dots.appendChild(small);
+  }
+
+  function calcStreak() {
+    let streak = 0;
+    for (let i = 0; i < 400; i++) {
+      const k = daysAgoKey(i);
+      if (minutesOn(k) > 0) streak++;
+      else if (i > 0) break; // allow today to be empty without breaking
+    }
+    return streak;
+  }
+
+  let period = 7;
+  function renderHistory() {
+    const totalMin = data.sessions.reduce((a, s) => a + s.minutes, 0);
+    const totalSessions = data.sessions.length;
+    const daysWithTime = new Set(data.sessions.map(s => s.date)).size;
+    const avg = daysWithTime ? Math.round(totalMin / daysWithTime) : 0;
+    const best = daysWithTime ? Math.max(...Array.from(new Set(data.sessions.map(s => s.date))).map(minutesOn)) : 0;
+
+    $("statsRow").innerHTML = [
+      ["⏱", fmtMinutes(totalMin), "Total focus time"],
+      ["🍅", totalSessions, "Sessions done"],
+      ["📅", avg + "m", "Avg / active day"],
+      ["🏆", fmtMinutes(best), "Best day"]
+    ].map(s => '<div class="stat"><div class="value">' + s[0] + " " + s[1] + '</div><div class="label">' + s[2] + "</div></div>").join("");
+
+    // chart
+    const chart = $("chart");
+    const keys = [];
+    for (let i = period - 1; i >= 0; i--) keys.push(daysAgoKey(i));
+    const vals = keys.map(minutesOn);
+    const max = Math.max(data.goalMinutes, ...vals, 1);
+    const goalPctPos = (1 - data.goalMinutes / max) * 100;
+
+    let html = '<div class="goal-line" style="bottom:' + goalPctPos + '%"><span>goal ' + fmtMinutes(data.goalMinutes) + "</span></div>";
+    html += '<div class="bars">';
+    keys.forEach((k, i) => {
+      const h = vals[i] / max * 100;
+      const d = new Date(k + "T12:00:00");
+      const label = period <= 7 ? d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3) : (d.getMonth() + 1) + "/" + d.getDate();
+      html += '<div class="bar-col"><div class="bar ' + (vals[i] >= data.goalMinutes && vals[i] > 0 ? "goal-met" : "") +
+        '" style="height:' + Math.max(h, vals[i] > 0 ? 3 : 1) + '%"><div class="tip">' + fmtMinutes(vals[i]) + " · " + countOn(k) +
+        " session" + (countOn(k) === 1 ? "" : "s") + '</div></div><div class="bar-label">' + label + "</div></div>";
+    });
+    html += "</div>";
+    chart.innerHTML = html;
+
+    // day list
+    const dayMap = {};
+    data.sessions.forEach(s => { dayMap[s.date] = (dayMap[s.date] || 0) + s.minutes; });
+    const sorted = Object.keys(dayMap).sort().reverse().slice(0, 30);
+    const list = $("dayList");
+    if (!sorted.length) {
+      list.innerHTML = '<div class="empty">No sessions logged yet. Complete a focus session or use “Log time” to get started.</div>';
+      return;
+    }
+    const peak = Math.max(...Object.values(dayMap), 1);
+    list.innerHTML = sorted.map(k => {
+      const d = new Date(k + "T12:00:00");
+      const pretty = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+      const tag = k === todayKey() ? "<small>today</small>" : "";
+      return '<div class="day-row"><div class="date">' + pretty + tag + '</div><div class="time">' + fmtMinutes(dayMap[k]) +
+        '</div><div class="count">' + countOn(k) + " session" + (countOn(k) === 1 ? "" : "s") +
+        '</div><div></div><div class="mini-bar"><div style="width:' + (dayMap[k] / peak * 100) + '%"></div></div></div>';
+    }).join("");
+  }
+
+  function renderAll() { renderTimer(); renderGoal(); renderHeader(); renderHistory(); }
+
+  // ---------- toast ----------
+  let toastTimer;
+  function toast(msg) {
+    const el = $("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
+  }
+
+  // ---------- events ----------
+  $("startBtn").addEventListener("click", toggle);
+  $("resetBtn").addEventListener("click", reset);
+  $("skipBtn").addEventListener("click", skip);
+
+  document.querySelectorAll(".mode-btn").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+  document.addEventListener("keydown", (e) => {
+    if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+    if ($("logModal").classList.contains("open")) return;
+    if (e.code === "Space") { e.preventDefault(); toggle(); }
+    else if (e.key.toLowerCase() === "r") reset();
+    else if (e.key.toLowerCase() === "s") skip();
+  });
+
+  // settings
+  function bindSetting(id, key, parse, after) {
+    const el = $(id);
+    el.addEventListener("change", () => {
+      const v = parse(el.value);
+      if (key === "goalMinutes") data.goalMinutes = v;
+      else data.settings[key] = v;
+      save();
+      if (after) after();
+      renderAll();
+    });
+  }
+  bindSetting("setFocus", "focus", v => Math.min(180, Math.max(1, +v || 25)), () => { if (!timer.running && timer.mode === "focus") { timer.remaining = timer.total = durationFor("focus"); renderTimer(); } });
+  bindSetting("setShort", "short", v => Math.min(60, Math.max(1, +v || 5)), () => { if (!timer.running && timer.mode === "short") { timer.remaining = timer.total = durationFor("short"); renderTimer(); } });
+  bindSetting("setLong", "long", v => Math.min(90, Math.max(1, +v || 15)), () => { if (!timer.running && timer.mode === "long") { timer.remaining = timer.total = durationFor("long"); renderTimer(); } });
+  bindSetting("setGoal", "goalMinutes", v => Math.min(1440, Math.max(5, +v || 120)));
+  bindSetting("setVolume", "volume", v => +v);
+  $("setSound").addEventListener("change", e => { data.settings.sound = e.target.checked; save(); if (e.target.checked) { initAudio(); playChime(true); } });
+  $("setAuto").addEventListener("change", e => { data.settings.auto = e.target.checked; save(); });
+  $("setNotify").addEventListener("change", async e => {
+    if (e.target.checked && "Notification" in window) {
+      const p = await Notification.requestPermission();
+      if (p !== "granted") { e.target.checked = false; toast("Notifications blocked in browser"); }
+    }
+    data.settings.notify = e.target.checked; save();
+  });
+  $("setVolume").addEventListener("input", e => { $("volVal").textContent = e.target.value + "%"; });
+
+  // history controls
+  $("periodTabs").addEventListener("click", e => {
+    if (!e.target.dataset.days) return;
+    period = +e.target.dataset.days;
+    document.querySelectorAll("#periodTabs button").forEach(b => b.classList.toggle("active", b === e.target));
+    renderHistory();
+  });
+  $("clearBtn").addEventListener("click", () => {
+    if (!data.sessions.length || !confirm("Delete all session history? This cannot be undone.")) return;
+    data.sessions = []; data.cycle = 0; save(); renderAll(); toast("History cleared");
+  });
+
+  // log modal
+  const modal = $("logModal");
+  $("logBtn").addEventListener("click", () => { $("logDate").value = todayKey(); $("logMinutes").value = 25; modal.classList.add("open"); $("logMinutes").focus(); });
+  $("logCancel").addEventListener("click", () => modal.classList.remove("open"));
+  modal.addEventListener("click", e => { if (e.target === modal) modal.classList.remove("open"); });
+  $("logSave").addEventListener("click", () => {
+    const mins = Math.min(600, Math.max(1, +$("logMinutes").value || 25));
+    const date = $("logDate").value || todayKey();
+    data.sessions.push({ date, minutes: mins, ts: Date.now() });
+    save(); renderAll(); modal.classList.remove("open"); toast("Logged " + fmtMinutes(mins) + " of focus");
+  });
+
+  // ---------- init ----------
+  $("setFocus").value = data.settings.focus;
+  $("setShort").value = data.settings.short;
+  $("setLong").value = data.settings.long;
+  $("setGoal").value = data.goalMinutes;
+  $("setSound").checked = !!data.settings.sound;
+  $("setVolume").value = data.settings.volume;
+  $("volVal").textContent = data.settings.volume + "%";
+  $("setNotify").checked = !!data.settings.notify;
+  $("setAuto").checked = !!data.settings.auto;
+
+  setMode("focus", true);
+  renderAll();
+})();
+</script>
+</body>
+</html>
